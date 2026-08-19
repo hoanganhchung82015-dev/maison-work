@@ -1,301 +1,355 @@
-// ==========================================
-// CẤU HÌNH SUPABASE & BIẾN TOÀN CỤC
-// ==========================================
-const SUPABASE_URL = 'https://lkvyigctxkxiwfmdijrx.supabase.co'; // Thay bằng URL Supabase của thầy
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdnlpZ2N0eGt4aXdmbWRpanJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMTQ1NzgsImV4cCI6MjEwMjY5MDU3OH0.OAgFnwrZQwVfA2KNZL-xXFLO6VGisnx7DS0wkyRah7A';                        // Thay bằng Anon Key Supabase của thầy
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// LocalStorage Key Identifiers
+const STORAGE_USERS = 'MSW_USERS_V1_5';
+const STORAGE_TASKS = 'MSW_TASKS_V1_5';
+
+// Khởi tạo dữ liệu mẫu
+function initDefaultData() {
+  if (!localStorage.getItem(STORAGE_USERS)) {
+    const defaultUsers = [
+      { username: 'hieutruong', fullname: 'Hiệu trưởng', role: 'PRINCIPAL', pass: '123456' },
+      { username: 'hieupho1', fullname: 'Nguyễn Văn A (HP)', role: 'VICE_PRINCIPAL', pass: '123456' },
+      { username: 'gv_toan', fullname: 'Trần Thị B (GV Toán)', role: 'TEACHER', pass: '123456' },
+      { username: 'gv_van', fullname: 'Lê Văn C (GV Văn)', role: 'TEACHER', pass: '123456' }
+    ];
+    localStorage.setItem(STORAGE_USERS, JSON.stringify(defaultUsers));
+  }
+
+  if (!localStorage.getItem(STORAGE_TASKS)) {
+    const defaultTasks = [
+      {
+        id: 'CV-19082026-0211',
+        title: 'Báo cáo kế hoạch giảng dạy Học kỳ 1',
+        created_by: 'Hiệu trưởng',
+        assignees: ['Nguyễn Văn A (HP)', 'Trần Thị B (GV Toán)'],
+        deadline: '2026-08-25',
+        instruction_file: null,
+        report_file: null,
+        status: 'Đang xử lý',
+        note: 'Yêu cầu hoàn thành đúng hạn'
+      }
+    ];
+    localStorage.setItem(STORAGE_TASKS, JSON.stringify(defaultTasks));
+  }
+}
+
+initDefaultData();
+
 let currentUser = null;
-let allUsersList = [];
 
-// ==========================================
-// 2. LOGIC ĐĂNG NHẬP & PHÂN QUYỀN VAI TRÒ
-// ==========================================
-async function handleLogin(e) {
-    e.preventDefault();
-    
-    // Chuẩn hóa dữ liệu đầu vào (loại bỏ khoảng trắng, hạ chữ thường email)
-    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-    const password = document.getElementById('loginPassword').value.trim();
+// Helper: Chuyển File sang Base64 để lưu vào localStorage
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve({ name: file.name, data: reader.result });
+    reader.onerror = error => reject(error);
+  });
+}
 
-    console.log("Đang thử đăng nhập với email:", email);
+// Helper: Sinh Mã Công việc chuẩn CV-DDMMYYYY-HHMM (Hệ 24 giờ)
+function generateTaskId() {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
 
-    // Truy vấn dữ liệu từ bảng users (dùng ilike để không phân biệt chữ hoa/thường)
-    const { data, error } = await _supabase
-        .from('users')
-        .select('*')
-        .ilike('email', email);
+  return `CV-${day}${month}${year}-${hours}${minutes}`;
+}
 
-    if (error) {
-        console.error("Lỗi truy vấn Supabase:", error);
-        alert('❌ Lỗi kết nối CSDL: ' + error.message);
-        return;
-    }
+// Handle Login
+const loginScreen = document.getElementById('login-screen');
+const appScreen = document.getElementById('app-screen');
 
-    if (!data || data.length === 0) {
-        alert('❌ Không tìm thấy tài khoản với email này!');
-        return;
-    }
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const uName = document.getElementById('login-username').value.trim();
+  const uPass = document.getElementById('login-password').value.trim();
 
-    const user = data[0];
+  const users = JSON.parse(localStorage.getItem(STORAGE_USERS));
+  const user = users.find(u => u.username === uName && u.pass === uPass);
 
-    // Kiểm tra mật khẩu
-    if (String(user.password).trim() !== password) {
-        alert('❌ Mật khẩu không chính xác!');
-        return;
-    }
-
-    // Lưu thông tin người dùng hiện tại
+  if (user) {
     currentUser = user;
-    document.getElementById('loginSection').classList.add('hidden');
-    document.getElementById('mainSection').classList.remove('hidden');
+    renderApp();
+  } else {
+    alert('Tài khoản hoặc mật khẩu không chính xác!');
+  }
+});
 
-    document.getElementById('userInfoDisplay').innerText = 
-        `Cán bộ: ${currentUser.full_name || 'Chưa cập nhật'} | Chức vụ: ${currentUser.role}`;
+document.getElementById('btn-logout').addEventListener('click', () => {
+  currentUser = null;
+  appScreen.classList.add('hidden');
+  loginScreen.classList.remove('hidden');
+});
 
-    // Phân quyền hiển thị giao diện theo chức vụ
-    const adminUserPanel = document.getElementById('adminUserPanel');
-    const createTaskPanel = document.getElementById('createTaskPanel');
-    const taskListPanel = document.getElementById('taskListPanel');
+// Giao diện chính theo Role
+function renderApp() {
+  loginScreen.classList.add('hidden');
+  appScreen.classList.remove('hidden');
 
-    if (currentUser.role === 'HIEU_TRUONG') {
-        // Hiệu trưởng: Có quyền Quản trị tài khoản & Giao việc
-        adminUserPanel?.classList.remove('hidden');
-        createTaskPanel?.classList.remove('hidden');
-        taskListPanel?.classList.replace('lg:col-span-3', 'lg:col-span-2');
-        loadUserManagement();
-    } else if (currentUser.role === 'PHO_HIEU_TRUONG') {
-        // Phó Hiệu trưởng: Có quyền Giao việc & Báo cáo hoàn thành
-        adminUserPanel?.classList.add('hidden');
-        createTaskPanel?.classList.remove('hidden');
-        taskListPanel?.classList.replace('lg:col-span-3', 'lg:col-span-2');
-    } else {
-        // Giáo viên: Xem công việc, tiếp nhận và nộp báo cáo
-        adminUserPanel?.classList.add('hidden');
-        createTaskPanel?.classList.add('hidden');
-        taskListPanel?.classList.replace('lg:col-span-2', 'lg:col-span-3');
-    }
+  document.getElementById('user-info').innerText = currentUser.fullname;
+  const badge = document.getElementById('user-badge');
 
-    await loadAllUsersSelect();
-    loadTasks();
+  if (currentUser.role === 'PRINCIPAL') badge.innerText = 'Hiệu trưởng (Admin)';
+  else if (currentUser.role === 'VICE_PRINCIPAL') badge.innerText = 'Hiệu phó';
+  else badge.innerText = 'Giáo viên';
+
+  const menuAssign = document.getElementById('menu-assign');
+  const menuUsers = document.getElementById('menu-users');
+
+  if (currentUser.role === 'PRINCIPAL') {
+    menuAssign.classList.remove('hidden');
+    menuUsers.classList.remove('hidden');
+  } else if (currentUser.role === 'VICE_PRINCIPAL') {
+    menuAssign.classList.remove('hidden');
+    menuUsers.classList.add('hidden');
+  } else {
+    menuAssign.classList.add('hidden');
+    menuUsers.classList.add('hidden');
+  }
+
+  loadTasks();
+  loadAssigneeCheckboxes();
+  if (currentUser.role === 'PRINCIPAL') loadUserList();
 }
 
-function handleLogout() {
-    currentUser = null;
-    location.reload();
-}
-
-// ==========================================
-// 3. QUẢN LÝ TÀI KHOẢN (QUYỀN HIỆU TRƯỞNG)
-// ==========================================
-async function handleCreateUser(e) {
+// Navigation Tabs
+document.querySelectorAll('.nav-link').forEach(link => {
+  link.addEventListener('click', (e) => {
     e.preventDefault();
-    const full_name = document.getElementById('newFullName').value.trim();
-    const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
-    const password = document.getElementById('newUserPassword').value.trim();
-    const role = document.getElementById('newUserRole').value;
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
 
-    const { error } = await _supabase.from('users').insert([{ full_name, email, password, role }]);
+    link.classList.add('active');
+    const tabId = link.getAttribute('data-tab');
+    document.getElementById(tabId).classList.remove('hidden');
+  });
+});
 
-    if (error) {
-        alert('❌ Lỗi tạo tài khoản: ' + error.message);
-    } else {
-        alert('✅ Đã tạo tài khoản thành công!');
-        document.querySelector('#adminUserPanel form').reset();
-        document.getElementById('newUserPassword').value = '123456';
-        loadUserManagement();
-        loadAllUsersSelect();
+// Load Danh sách Công việc
+function loadTasks() {
+  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS)) || [];
+  const tbody = document.getElementById('task-list-body');
+  tbody.innerHTML = '';
+
+  tasks.forEach(task => {
+    const isAssignee = task.assignees.includes(currentUser.fullname);
+    const isCreator = task.created_by === currentUser.fullname;
+    const isMaster = currentUser.role === 'PRINCIPAL';
+
+    if (isAssignee || isCreator || isMaster) {
+      const tr = document.createElement('tr');
+
+      // Link download văn bản chỉ đạo
+      const instFileHtml = task.instruction_file 
+        ? `<a href="${task.instruction_file.data}" download="${task.instruction_file.name}" class="file-link">📄 ${task.instruction_file.name}</a>` 
+        : '<span style="color:#aaa;">Không có</span>';
+
+      // Link download file báo cáo
+      const reportFileHtml = task.report_file 
+        ? `<a href="${task.report_file.data}" download="${task.report_file.name}" class="file-link">📎 ${task.report_file.name}</a>` 
+        : '<span style="color:#aaa;">Chưa nộp</span>';
+
+      tr.innerHTML = `
+        <td><b>${task.id}</b></td>
+        <td>${task.title}</td>
+        <td>${task.created_by}</td>
+        <td>${task.assignees.join(', ')}</td>
+        <td>${task.deadline}</td>
+        <td>${instFileHtml}</td>
+        <td>${reportFileHtml}</td>
+        <td><span class="badge">${task.status}</span></td>
+        <td>
+          ${isAssignee && task.status !== 'Hoàn thành' ? `<button class="btn btn-success btn-sm" onclick="openReportModal('${task.id}')">Báo cáo hoàn thành</button>` : ''}
+          ${(isCreator || isMaster) && task.status === 'Chờ duyệt' ? `<button class="btn btn-primary btn-sm" onclick="approveTask('${task.id}')">Duyệt hoàn thành</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
     }
+  });
 }
 
-async function loadUserManagement() {
-    const { data, error } = await _supabase.from('users').select('*').order('id', { ascending: true });
-    if (error) return;
+// Multi-select danh sách giao việc
+function loadAssigneeCheckboxes() {
+  const users = JSON.parse(localStorage.getItem(STORAGE_USERS)) || [];
+  const container = document.getElementById('assignee-checkbox-group');
+  container.innerHTML = '';
 
-    const tbody = document.getElementById('userListTable');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    data.forEach(u => {
-        tbody.innerHTML += `
-            <tr>
-                <td class="p-2">${u.id}</td>
-                <td class="p-2 font-bold">${u.full_name || 'Chưa đặt tên'}</td>
-                <td class="p-2">${u.email}</td>
-                <td class="p-2">${u.role}</td>
-            </tr>
-        `;
-    });
-}
-
-// ==========================================
-// 4. QUẢN LÝ & GIAO CÔNG VIỆC (NHIỀU NGƯỜI)
-// ==========================================
-async function loadAllUsersSelect() {
-    const { data } = await _supabase.from('users').select('*');
-    allUsersList = data || [];
-
-    const select = document.getElementById('assignee_ids');
-    if (!select) return;
-
-    select.innerHTML = '';
-    allUsersList.forEach(u => {
-        if (u.id !== currentUser.id) {
-            select.innerHTML += `<option value="${u.id}">[${u.role}] ${u.full_name || u.email}</option>`;
-        }
-    });
-}
-
-async function handleCreateTask(e) {
-    e.preventDefault();
-    const title = document.getElementById('title').value;
-    const output_req = document.getElementById('output_req').value;
-    const due_date = document.getElementById('due_date').value;
-
-    const select = document.getElementById('assignee_ids');
-    const selectedAssignees = Array.from(select.selectedOptions).map(opt => parseInt(opt.value));
-
-    if (selectedAssignees.length === 0) {
-        alert('⚠️ Vui lòng chọn ít nhất 1 người thực hiện!');
-        return;
+  users.forEach(u => {
+    if (u.username !== currentUser.username) {
+      const label = document.createElement('label');
+      label.className = 'checkbox-item';
+      label.innerHTML = `<input type="checkbox" name="assignees" value="${u.fullname}"> ${u.fullname} (${u.role})`;
+      container.appendChild(label);
     }
-
-    const { error } = await _supabase.from('work_items').insert([{
-        code: 'CV-' + Math.floor(1000 + Math.random() * 9000),
-        title,
-        output_requirements: output_req,
-        created_by: currentUser.id,
-        assignee_ids: selectedAssignees,
-        due_date,
-        status: 'MOI_TAO'
-    }]);
-
-    if (!error) {
-        alert('🚀 Đã phát hành công việc thành công!');
-        document.querySelector('#createTaskPanel form').reset();
-        loadTasks();
-    } else {
-        alert('❌ Lỗi giao việc: ' + error.message);
-    }
+  });
 }
 
-// ==========================================
-// 5. THEO DÕI & BÁO CÁO TIẾN ĐỘ CONG VIỆC
-// ==========================================
-async function loadTasks() {
-    const { data, error } = await _supabase.from('work_items').select('*').order('created_at', { ascending: false });
-    if (error) return;
+// Xử lý Giao việc Mới
+document.getElementById('assign-task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = document.getElementById('task-title').value.trim();
+  const deadline = document.getElementById('task-deadline').value;
+  const note = document.getElementById('task-note').value;
+  const fileInput = document.getElementById('task-instruction-file');
 
-    const tbody = document.getElementById('taskList');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+  const selectedAssignees = Array.from(document.querySelectorAll('input[name="assignees"]:checked'))
+                                 .map(cb => cb.value);
 
-    data.forEach(task => {
-        const isAssigned = task.assignee_ids && task.assignee_ids.includes(currentUser.id);
-        const isCreator = task.created_by === currentUser.id;
+  if (selectedAssignees.length === 0) {
+    alert('Vui lòng chọn ít nhất một người thực hiện!');
+    return;
+  }
 
-        // Lọc danh sách công việc theo phân quyền
-        if (currentUser.role !== 'HIEU_TRUONG' && !isAssigned && !isCreator) {
-            return;
-        }
+  let instructionFile = null;
+  if (fileInput.files.length > 0) {
+    instructionFile = await fileToBase64(fileInput.files[0]);
+  }
 
-        let statusBadge = '<span class="badge badge-new">Mới giao</span>';
-        if (task.status === 'DA_TIEP_NHAN') statusBadge = '<span class="badge badge-working">Đang thực hiện</span>';
-        if (task.status === 'CHO_DUYET') statusBadge = '<span class="badge badge-pending">Chờ nghiệm thu</span>';
-        if (task.status === 'HOAN_THANH') statusBadge = '<span class="badge badge-done">✓ Hoàn thành</span>';
+  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS)) || [];
+  const taskId = generateTaskId();
 
-        let actionBtn = '';
+  const newTask = {
+    id: taskId,
+    title,
+    created_by: currentUser.fullname,
+    assignees: selectedAssignees,
+    deadline,
+    instruction_file: instructionFile,
+    report_file: null,
+    status: 'Đang xử lý',
+    note
+  };
 
-        // Hiệu trưởng / Người giao việc nghiệm thu
-        if (isCreator || currentUser.role === 'HIEU_TRUONG') {
-            if (task.status === 'CHO_DUYET') {
-                actionBtn = `<button onclick="approveTask(${task.id})" class="bg-green-600 hover:bg-green-700 text-white font-bold px-2 py-1 rounded text-xs">Nghiệm thu</button>`;
-            } else {
-                actionBtn = `<span class="text-xs text-gray-400">Theo dõi</span>`;
-            }
-        }
-        
-        // Người được giao việc thực hiện
-        if (isAssigned) {
-            if (task.status === 'MOI_TAO') {
-                actionBtn = `<button onclick="acceptTask(${task.id})" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded text-xs">1. Tiếp nhận</button>`;
-            } else if (task.status === 'DA_TIEP_NHAN') {
-                actionBtn = `<button onclick="openSubmitModal(${task.id})" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2 py-1 rounded text-xs">2. Báo cáo & Hoàn thành</button>`;
-            }
-        }
+  tasks.push(newTask);
+  localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
+  alert(`Giao việc thành công! Mã CV: ${taskId}`);
+  document.getElementById('assign-task-form').reset();
+  loadTasks();
+});
 
-        tbody.innerHTML += `
-            <tr class="border-b">
-                <td class="p-3 font-bold text-blue-900">${task.code}</td>
-                <td class="p-3">
-                    <div class="font-bold text-gray-800">${task.title}</div>
-                    <div class="text-xs text-gray-500">Yêu cầu: ${task.output_requirements}</div>
-                </td>
-                <td class="p-3">${statusBadge}</td>
-                <td class="p-3">
-                    ${task.document_url 
-                        ? `<a href="${task.document_url}" target="_blank" class="text-blue-600 underline text-xs font-bold">📎 File minh chứng</a>` 
-                        : `<span class="text-xs text-gray-400">Chưa nộp</span>`}
-                </td>
-                <td class="p-3 text-center">${actionBtn}</td>
-            </tr>
-        `;
-    });
-}
+// Modal Báo cáo Hoàn thành
+const reportModal = document.getElementById('modal-report-task');
+document.querySelector('.close-modal-report').onclick = () => reportModal.classList.add('hidden');
 
-// ==========================================
-// 6. THAO TÁC CẬP NHẬT TRẠNG THÁI & ĐỔI MẬT KHẨU
-// ==========================================
-async function acceptTask(id) {
-    await _supabase.from('work_items').update({ status: 'DA_TIEP_NHAN' }).eq('id', id);
+window.openReportModal = function(taskId) {
+  document.getElementById('report-task-id').value = taskId;
+  reportModal.classList.remove('hidden');
+};
+
+document.getElementById('report-task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const taskId = document.getElementById('report-task-id').value;
+  const fileInput = document.getElementById('task-report-file');
+
+  if (fileInput.files.length === 0) {
+    alert('Vui lòng đính kèm sản phẩm/báo cáo!');
+    return;
+  }
+
+  const reportFile = await fileToBase64(fileInput.files[0]);
+  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS));
+  const task = tasks.find(t => t.id === taskId);
+
+  if (task) {
+    task.report_file = reportFile;
+    task.status = 'Chờ duyệt';
+    localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
+    alert('Đã gửi báo cáo thành công!');
+    reportModal.classList.add('hidden');
+    document.getElementById('report-task-form').reset();
     loadTasks();
-}
+  }
+});
 
-function openSubmitModal(id) {
-    document.getElementById('modalTaskId').value = id;
-    document.getElementById('submitModal').classList.remove('hidden');
-}
-
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.add('hidden');
-}
-
-async function confirmSubmitTask() {
-    const id = document.getElementById('modalTaskId').value;
-    const note = document.getElementById('submitNote').value;
-    const url = document.getElementById('submitUrl').value;
-
-    await _supabase.from('work_items').update({
-        status: 'CHO_DUYET',
-        description: note,
-        document_url: url
-    }).eq('id', id);
-
-    closeModal('submitModal');
+// Duyệt công việc
+window.approveTask = function(taskId) {
+  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS));
+  const task = tasks.find(t => t.id === taskId);
+  if (task) {
+    task.status = 'Hoàn thành';
+    localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
     loadTasks();
+  }
+};
+
+// Admin: Quản lý & Xóa Tài khoản
+function loadUserList() {
+  const users = JSON.parse(localStorage.getItem(STORAGE_USERS)) || [];
+  const tbody = document.getElementById('user-list-body');
+  tbody.innerHTML = '';
+
+  users.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${u.username}</td>
+      <td>${u.fullname}</td>
+      <td>${u.role}</td>
+      <td>
+        ${u.username !== currentUser.username ? `<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.username}')">Xóa tài khoản</button>` : '<span style="color:gray;">Tài khoản hiện tại</span>'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
-async function approveTask(id) {
-    await _supabase.from('work_items').update({ status: 'HOAN_THANH' }).eq('id', id);
-    loadTasks();
-}
+document.getElementById('create-user-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const username = document.getElementById('new-username').value.trim();
+  const fullname = document.getElementById('new-fullname').value.trim();
+  const role = document.getElementById('new-role').value;
+  const pass = document.getElementById('new-password').value.trim();
 
-function openChangePasswordModal() {
-    document.getElementById('changePasswordModal').classList.remove('hidden');
-}
+  const users = JSON.parse(localStorage.getItem(STORAGE_USERS));
+  if (users.some(u => u.username === username)) {
+    alert('Tên đăng nhập đã tồn tại!');
+    return;
+  }
 
-async function confirmChangePassword() {
-    const newPassword = document.getElementById('newPersonalPassword').value.trim();
-    if (!newPassword) {
-        alert('⚠️ Vui lòng nhập mật khẩu mới!');
-        return;
-    }
+  users.push({ username, fullname, role, pass });
+  localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
+  alert('Tạo tài khoản thành công!');
+  document.getElementById('create-user-form').reset();
+  loadUserList();
+  loadAssigneeCheckboxes();
+});
 
-    const { error } = await _supabase.from('users').update({ password: newPassword }).eq('id', currentUser.id);
+// Chức năng XÓA TÀI KHOẢN dành cho Quản lý (Hiệu trưởng)
+window.deleteUser = function(uName) {
+  if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản [${uName}]?`)) {
+    let users = JSON.parse(localStorage.getItem(STORAGE_USERS));
+    users = users.filter(u => u.username !== uName);
+    localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
+    alert('Xóa tài khoản thành công!');
+    loadUserList();
+    loadAssigneeCheckboxes();
+  }
+};
 
-    if (!error) {
-        alert('🎉 Đổi mật khẩu thành công!');
-        closeModal('changePasswordModal');
-    } else {
-        alert('❌ Lỗi đổi mật khẩu: ' + error.message);
-    }
-}
+// Modal Đổi Mật Khẩu
+const passModal = document.getElementById('modal-change-password');
+document.getElementById('btn-change-pass').onclick = () => passModal.classList.remove('hidden');
+document.querySelector('.close-modal-pass').onclick = () => passModal.classList.add('hidden');
+
+document.getElementById('change-pass-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const oldPass = document.getElementById('old-pass').value;
+  const newPass = document.getElementById('new-pass').value;
+
+  if (oldPass !== currentUser.pass) {
+    alert('Mật khẩu cũ không chính xác!');
+    return;
+  }
+
+  const users = JSON.parse(localStorage.getItem(STORAGE_USERS));
+  const user = users.find(u => u.username === currentUser.username);
+  user.pass = newPass;
+  currentUser.pass = newPass;
+
+  localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
+  alert('Đổi mật khẩu thành công!');
+  passModal.classList.add('hidden');
+  document.getElementById('change-pass-form').reset();
+});
