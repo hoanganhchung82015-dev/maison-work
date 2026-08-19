@@ -1,6 +1,6 @@
 // 1. CẤU HÌNH SUPABASE & BIẾN TOÀN CỤC
 // ==========================================
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co'; // Thay bằng URL Supabase của thầy
+const SUPABASE_URL = 'https://lkvyigctxkxiwfmdijrx.supabase.co'; // Thay bằng URL Supabase của thầy
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdnlpZ2N0eGt4aXdmbWRpanJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMTQ1NzgsImV4cCI6MjEwMjY5MDU3OH0.OAgFnwrZQwVfA2KNZL-xXFLO6VGisnx7DS0wkyRah7A';                        // Thay bằng Anon Key Supabase của thầy
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
