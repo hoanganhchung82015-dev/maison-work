@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mai Sơn Work - Quản trị Luồng công việc Trường học</title>
-    <!-- Thư viện Tailwind CSS & Supabase JS SDK -->
+    <title>Mai Sơn Work - Hệ thống Quản trị THPT Mai Sơn</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-gray-100 font-sans min-h-screen">
 
-    <!-- 1. MÀN HÌNH ĐĂNG NHẬP -->
+    <!-- 1. KHUNG ĐĂNG NHẬP (CÓ MẬT KHẨU) -->
     <div id="loginSection" class="flex justify-center items-center min-h-screen p-4">
         <div class="max-w-md w-full bg-white p-8 rounded-lg shadow-xl border">
             <div class="text-center mb-6">
@@ -21,41 +20,97 @@
             
             <form onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Email công vụ (*)</label>
-                    <input type="email" id="loginEmail" required placeholder="nhapemail@maison.edu.vn" class="w-full border p-2.5 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Email công vụ (*)</label>
+                    <input type="email" id="loginEmail" required placeholder="nhapemail@maison.edu.vn" class="w-full border p-2.5 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Mật khẩu (*)</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full border p-2.5 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 
-                <div class="bg-blue-50 p-3 rounded text-xs text-blue-800 space-y-1">
-                    <p class="font-bold">Email Demo để thầy kiểm thử nhanh:</p>
+                <div class="bg-blue-50 p-3 rounded text-xs text-blue-800">
+                    <p class="font-bold">Mật khẩu mặc định hệ thống: <b>123456</b></p>
                     <p>• Hiệu trưởng: <b>hieutruong@maison.edu.vn</b></p>
-                    <p>• PHT: <b>pht@maison.edu.vn</b></p>
-                    <p>• Giáo viên: <b>giaovientoan@maison.edu.vn</b></p>
                 </div>
 
-                <button type="submit" class="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2.5 rounded transition shadow">
+                <button type="submit" class="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2.5 rounded text-sm transition shadow">
                     Đăng nhập Hệ thống
                 </button>
             </form>
         </div>
     </div>
 
-    <!-- 2. MÀN HÌNH LÀM VIỆC CHÍNH (ẨN KHI CHƯA ĐĂNG NHẬP) -->
+    <!-- 2. KHUNG LÀM VIỆC CHÍNH -->
     <div id="mainSection" class="hidden p-6 max-w-7xl mx-auto">
         
-        <!-- BAR THÔNG TIN TÀI KHOẢN -->
+        <!-- HEADER THÔNG TIN & ĐỔI MẬT KHẨU -->
         <header class="bg-blue-900 text-white p-4 rounded-lg shadow-md mb-6 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-bold">TRƯỜNG THPT MAI SƠN - MAI SƠN WORK</h1>
-                <p class="text-xs text-blue-200" id="userInfoDisplay">Đang tải thông tin tài khoản...</p>
+                <p class="text-xs text-blue-200" id="userInfoDisplay">Đang tải thông tin...</p>
             </div>
-            <button onclick="handleLogout()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded transition">
-                🚪 Đăng xuất
-            </button>
+            <div class="flex gap-2">
+                <button onclick="openChangePasswordModal()" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded transition">
+                    🔑 Đổi mật khẩu
+                </button>
+                <button onclick="handleLogout()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded transition">
+                    🚪 Đăng xuất
+                </button>
+            </div>
         </header>
 
+        <!-- KHU VỰC QUẢN TRỊ TÀI KHOẢN (CHỈ DÀNH CHO HIỆU TRƯỞNG) -->
+        <div id="adminUserPanel" class="hidden bg-white p-5 rounded-lg shadow-md mb-6 border-t-4 border-amber-600">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2">
+                <span>👤</span> Quản trị Tài khoản Cán bộ / Giáo viên (Quyền Hiệu trưởng)
+            </h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Form Tạo tài khoản mới -->
+                <form onsubmit="handleCreateUser(event)" class="space-y-3 bg-gray-50 p-4 rounded border">
+                    <h3 class="text-xs font-bold text-gray-700 uppercase">Tạo tài khoản mới</h3>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Họ và tên (*)</label>
+                        <input type="text" id="newFullName" required placeholder="VD: Nguyễn Văn A" class="w-full border p-2 rounded text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Email công vụ (*)</label>
+                        <input type="email" id="newUserEmail" required placeholder="nguyenvana@maison.edu.vn" class="w-full border p-2 rounded text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Mật khẩu khởi tạo (*)</label>
+                        <input type="text" id="newUserPassword" value="123456" required class="w-full border p-2 rounded text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Chức vụ / Vai trò (*)</label>
+                        <select id="newUserRole" class="w-full border p-2 rounded text-sm">
+                            <option value="PHO_HIEU_TRUONG">Phó Hiệu trưởng</option>
+                            <option value="GIAO_VIEN">Giáo viên</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded text-sm shadow">
+                        ➕ Thêm tài khoản
+                    </button>
+                </form>
+
+                <!-- Bảng Danh sách Tài khoản -->
+                <div class="lg:col-span-2 overflow-x-auto max-h-64 border rounded">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-100 text-xs font-bold border-b sticky top-0">
+                            <tr>
+                                <th class="p-2">ID</th>
+                                <th class="p-2">Họ & Tên</th>
+                                <th class="p-2">Email</th>
+                                <th class="p-2">Chức vụ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userListTable" class="text-xs divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- PANEL GIAO VIỆC (CHỈ HIỂN THỊ VỚI BGH/HIỆU TRƯỞNG) -->
+            <!-- PANEL GIAO VIỆC (HIỆU TRƯỞNG & PHÓ HIỆU TRƯỜNG) -->
             <div id="createTaskPanel" class="bg-white p-5 rounded-lg shadow-md hidden border-t-4 border-blue-800">
                 <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2">
                     <span>➕</span> Giao nhiệm vụ / Chỉ đạo
@@ -63,24 +118,23 @@
                 <form onsubmit="handleCreateTask(event)" class="space-y-3">
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">Tên công việc (*)</label>
-                        <input type="text" id="title" required placeholder="VD: Báo cáo chuyên môn HK1" class="w-full border p-2 rounded text-sm">
+                        <input type="text" id="title" required placeholder="VD: Kiểm tra hồ sơ giáo án HK1" class="w-full border p-2 rounded text-sm">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">Yêu cầu sản phẩm đầu ra (*)</label>
-                        <textarea id="output_req" required rows="3" placeholder="VD: Nộp file PDF kế hoạch + Biên bản họp" class="w-full border p-2 rounded text-sm"></textarea>
+                        <textarea id="output_req" required rows="3" placeholder="VD: Nộp biên bản tổng hợp" class="w-full border p-2 rounded text-sm"></textarea>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1">Cán bộ / Giáo viên thực hiện (*)</label>
-                        <select id="assignee_id" class="w-full border p-2 rounded text-sm">
-                            <option value="2">PHT. Nguyễn Văn A</option>
-                            <option value="3">GV. Lê Thị C (Tổ Toán)</option>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Phân việc cho (Chọn nhiều người - Giữ Ctrl hoặc Cmd) (*)</label>
+                        <select id="assignee_ids" multiple required class="w-full border p-2 rounded text-sm h-28 bg-gray-50">
+                            <!-- Nạp danh sách giáo viên động -->
                         </select>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">Hạn chót (Deadline) (*)</label>
                         <input type="datetime-local" id="due_date" required class="w-full border p-2 rounded text-sm">
                     </div>
-                    <button type="submit" class="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2 rounded text-sm shadow transition">
+                    <button type="submit" class="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2 rounded text-sm shadow">
                         🚀 Phát hành & Giao việc
                     </button>
                 </form>
@@ -89,59 +143,62 @@
             <!-- PANEL DANH SÁCH CÔNG VIỆC -->
             <div id="taskListPanel" class="lg:col-span-3 bg-white p-5 rounded-lg shadow-md border-t-4 border-gray-800">
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                        <span>📋</span> Tiến độ Luồng công việc
-                    </h2>
-                    <button onclick="loadTasks()" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold px-3 py-1.5 rounded flex items-center gap-1">
-                        🔄 Tải lại dữ liệu
-                    </button>
+                    <h2 class="text-lg font-bold text-gray-800">📋 Tiến độ Luồng công việc</h2>
+                    <button onclick="loadTasks()" class="text-xs bg-gray-200 hover:bg-gray-300 font-semibold px-3 py-1.5 rounded">🔄 Tải lại</button>
                 </div>
-
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-100 text-xs font-bold text-gray-700 uppercase border-b">
                                 <th class="p-3">Mã CV</th>
-                                <th class="p-3">Tên & Yêu cầu công việc</th>
+                                <th class="p-3">Nhiệm vụ & Yêu cầu</th>
                                 <th class="p-3">Trạng thái</th>
-                                <th class="p-3">Sản phẩm / Minh chứng</th>
+                                <th class="p-3">Minh chứng</th>
                                 <th class="p-3 text-center">Thao tác xử lý</th>
                             </tr>
                         </thead>
-                        <tbody id="taskList" class="text-sm divide-y">
-                            <!-- Dữ liệu nạp từ app.js -->
-                        </tbody>
+                        <tbody id="taskList" class="text-sm divide-y"></tbody>
                     </table>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- MODAL NỘP BÁO CÁO (POPUP DÀNH CHO GIÁO VIÊN TRẢ KẾT QUẢ) -->
+    <!-- MODAL POPUP NỘP BÁO CÁO KẾT QUẢ -->
     <div id="submitModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex justify-center items-center p-4 z-50">
         <div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 space-y-4">
-            <h3 class="text-lg font-bold text-gray-800 border-b pb-2">📤 Trả kết quả / Nộp minh chứng</h3>
+            <h3 class="text-lg font-bold text-gray-800 border-b pb-2">📤 Báo cáo / Hoàn thành công việc</h3>
             <input type="hidden" id="modalTaskId">
-            
             <div>
-                <label class="block text-xs font-bold text-gray-700 mb-1">Ghi chú kết quả thực hiện (*)</label>
-                <textarea id="submitNote" rows="3" placeholder="Tóm tắt công việc đã làm..." class="w-full border p-2 rounded text-sm" required></textarea>
+                <label class="block text-xs font-bold text-gray-700 mb-1">Ghi chú kết quả (*)</label>
+                <textarea id="submitNote" rows="3" placeholder="Tóm tắt nội dung đã thực hiện..." class="w-full border p-2 rounded text-sm" required></textarea>
             </div>
-
             <div>
-                <label class="block text-xs font-bold text-gray-700 mb-1">Đường link file Minh chứng (Google Drive / PDF / Word) (*)</label>
-                <input type="url" id="submitUrl" placeholder="https://drive.google.com/file/d/..." class="w-full border p-2 rounded text-sm" required>
+                <label class="block text-xs font-bold text-gray-700 mb-1">Link file đính kèm / Minh chứng (*)</label>
+                <input type="url" id="submitUrl" placeholder="https://drive.google.com/..." class="w-full border p-2 rounded text-sm" required>
             </div>
-
-            <div class="flex justify-end gap-2 pt-2 border-t">
-                <button onclick="closeModal()" class="px-4 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-xs font-bold">Hủy bỏ</button>
-                <button onclick="confirmSubmitTask()" class="px-4 py-1.5 rounded bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow">Nộp báo cáo</button>
+            <div class="flex justify-end gap-2 border-t pt-2">
+                <button onclick="closeModal('submitModal')" class="px-4 py-1.5 rounded bg-gray-200 text-xs font-bold">Hủy</button>
+                <button onclick="confirmSubmitTask()" class="px-4 py-1.5 rounded bg-purple-700 text-white text-xs font-bold">Nộp báo cáo</button>
             </div>
         </div>
     </div>
 
-    <!-- Nhúng file Logic JavaScript -->
+    <!-- MODAL POPUP ĐỔI MẬT KHẨU CÁ NHÂN -->
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 space-y-4">
+            <h3 class="text-lg font-bold text-gray-800 border-b pb-2">🔑 Thay đổi Mật khẩu Cá nhân</h3>
+            <div>
+                <label class="block text-xs font-bold text-gray-700 mb-1">Mật khẩu mới (*)</label>
+                <input type="password" id="newPersonalPassword" placeholder="Nhập mật khẩu mới" class="w-full border p-2 rounded text-sm" required>
+            </div>
+            <div class="flex justify-end gap-2 border-t pt-2">
+                <button onclick="closeModal('changePasswordModal')" class="px-4 py-1.5 rounded bg-gray-200 text-xs font-bold">Hủy</button>
+                <button onclick="confirmChangePassword()" class="px-4 py-1.5 rounded bg-amber-600 text-white text-xs font-bold">Lưu mật khẩu mới</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
