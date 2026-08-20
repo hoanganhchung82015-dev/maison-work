@@ -1,8 +1,8 @@
-// LocalStorage Key Identifiers
-const STORAGE_USERS = 'MSW_USERS_V1_5';
-const STORAGE_TASKS = 'MSW_TASKS_V1_5';
+const STORAGE_USERS = 'MSW_USERS_V2_0';
+const STORAGE_TASKS = 'MSW_TASKS_V2_0';
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // Limit 2MB
 
-// Khởi tạo dữ liệu mẫu
+// Khởi tạo dữ liệu ban đầu
 function initDefaultData() {
   if (!localStorage.getItem(STORAGE_USERS)) {
     const defaultUsers = [
@@ -21,7 +21,7 @@ function initDefaultData() {
         title: 'Báo cáo kế hoạch giảng dạy Học kỳ 1',
         created_by: 'Hiệu trưởng',
         assignees: ['Nguyễn Văn A (HP)', 'Trần Thị B (GV Toán)'],
-        deadline: '2026-08-25',
+        deadline: '2026-08-15', // Ngày quá hạn mẫu
         instruction_file: null,
         report_file: null,
         status: 'Đang xử lý',
@@ -36,9 +36,13 @@ initDefaultData();
 
 let currentUser = null;
 
-// Helper: Chuyển File sang Base64 để lưu vào localStorage
+// Helper: Chuyển File sang Base64
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
+    if (file.size > MAX_FILE_SIZE) {
+      reject('Dung lượng tệp vượt quá 2MB! Vui lòng chọn tệp nhỏ hơn.');
+      return;
+    }
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => resolve({ name: file.name, data: reader.result });
@@ -46,7 +50,7 @@ function fileToBase64(file) {
   });
 }
 
-// Helper: Sinh Mã Công việc chuẩn CV-DDMMYYYY-HHMM (Hệ 24 giờ)
+// Helper: Mã CV tự động CV-DDMMYYYY-HHMM (24 giờ)
 function generateTaskId() {
   const now = new Date();
   const day = String(now.getDate()).padStart(2, '0');
@@ -58,7 +62,7 @@ function generateTaskId() {
   return `CV-${day}${month}${year}-${hours}${minutes}`;
 }
 
-// Handle Login
+// Login Handler
 const loginScreen = document.getElementById('login-screen');
 const appScreen = document.getElementById('app-screen');
 
@@ -84,7 +88,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   loginScreen.classList.remove('hidden');
 });
 
-// Giao diện chính theo Role
+// Render App Layout
 function renderApp() {
   loginScreen.classList.add('hidden');
   appScreen.classList.remove('hidden');
@@ -115,7 +119,7 @@ function renderApp() {
   if (currentUser.role === 'PRINCIPAL') loadUserList();
 }
 
-// Navigation Tabs
+// Chuyển Tab Navigation
 document.querySelectorAll('.nav-link').forEach(link => {
   link.addEventListener('click', (e) => {
     e.preventDefault();
@@ -128,11 +132,27 @@ document.querySelectorAll('.nav-link').forEach(link => {
   });
 });
 
-// Load Danh sách Công việc
+// Kiểm tra Trạng thái Quá Hạn
+function checkStatus(task) {
+  if (task.status === 'Hoàn thành') return { text: 'Hoàn thành', class: 'badge-success' };
+  
+  const today = new Date().toISOString().split('T')[0];
+  if (task.deadline < today) {
+    return { text: 'Quá hạn', class: 'badge-danger' };
+  }
+  
+  if (task.status === 'Chờ duyệt') return { text: 'Chờ duyệt', class: 'badge-info' };
+  return { text: 'Đang xử lý', class: 'badge-warning' };
+}
+
+// Load Danh sách Công việc + Lọc & Tìm kiếm
 function loadTasks() {
   const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS)) || [];
   const tbody = document.getElementById('task-list-body');
   tbody.innerHTML = '';
+
+  const keyword = document.getElementById('search-keyword').value.toLowerCase().trim();
+  const filterStatus = document.getElementById('filter-status').value;
 
   tasks.forEach(task => {
     const isAssignee = task.assignees.includes(currentUser.fullname);
@@ -140,36 +160,47 @@ function loadTasks() {
     const isMaster = currentUser.role === 'PRINCIPAL';
 
     if (isAssignee || isCreator || isMaster) {
-      const tr = document.createElement('tr');
+      const statusObj = checkStatus(task);
 
-      // Link download văn bản chỉ đạo
-      const instFileHtml = task.instruction_file 
-        ? `<a href="${task.instruction_file.data}" download="${task.instruction_file.name}" class="file-link">📄 ${task.instruction_file.name}</a>` 
-        : '<span style="color:#aaa;">Không có</span>';
+      // Bộ lọc từ khóa & trạng thái
+      const matchesKeyword = task.id.toLowerCase().includes(keyword) || task.title.toLowerCase().includes(keyword);
+      const matchesStatus = (filterStatus === 'ALL') || (statusObj.text === filterStatus);
 
-      // Link download file báo cáo
-      const reportFileHtml = task.report_file 
-        ? `<a href="${task.report_file.data}" download="${task.report_file.name}" class="file-link">📎 ${task.report_file.name}</a>` 
-        : '<span style="color:#aaa;">Chưa nộp</span>';
+      if (matchesKeyword && matchesStatus) {
+        const tr = document.createElement('tr');
+        if (statusObj.text === 'Quá hạn') tr.classList.add('row-overdue');
 
-      tr.innerHTML = `
-        <td><b>${task.id}</b></td>
-        <td>${task.title}</td>
-        <td>${task.created_by}</td>
-        <td>${task.assignees.join(', ')}</td>
-        <td>${task.deadline}</td>
-        <td>${instFileHtml}</td>
-        <td>${reportFileHtml}</td>
-        <td><span class="badge">${task.status}</span></td>
-        <td>
-          ${isAssignee && task.status !== 'Hoàn thành' ? `<button class="btn btn-success btn-sm" onclick="openReportModal('${task.id}')">Báo cáo hoàn thành</button>` : ''}
-          ${(isCreator || isMaster) && task.status === 'Chờ duyệt' ? `<button class="btn btn-primary btn-sm" onclick="approveTask('${task.id}')">Duyệt hoàn thành</button>` : ''}
-        </td>
-      `;
-      tbody.appendChild(tr);
+        const instFileHtml = task.instruction_file 
+          ? `<a href="${task.instruction_file.data}" download="${task.instruction_file.name}" class="file-link">📄 ${task.instruction_file.name}</a>` 
+          : '<span style="color:#aaa;">Không có</span>';
+
+        const reportFileHtml = task.report_file 
+          ? `<a href="${task.report_file.data}" download="${task.report_file.name}" class="file-link">📎 ${task.report_file.name}</a>` 
+          : '<span style="color:#aaa;">Chưa nộp</span>';
+
+        tr.innerHTML = `
+          <td><b>${task.id}</b></td>
+          <td>${task.title}</td>
+          <td>${task.created_by}</td>
+          <td>${task.assignees.join(', ')}</td>
+          <td>${task.deadline}</td>
+          <td>${instFileHtml}</td>
+          <td>${reportFileHtml}</td>
+          <td><span class="badge ${statusObj.class}">${statusObj.text}</span></td>
+          <td>
+            ${isAssignee && task.status !== 'Hoàn thành' ? `<button class="btn btn-success btn-sm" onclick="openReportModal('${task.id}')">Báo cáo hoàn thành</button>` : ''}
+            ${(isCreator || isMaster) && task.status === 'Chờ duyệt' ? `<button class="btn btn-primary btn-sm" onclick="approveTask('${task.id}')">Duyệt hoàn thành</button>` : ''}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
     }
   });
 }
+
+// Bắt sự kiện Lọc & Tìm kiếm
+document.getElementById('search-keyword').addEventListener('input', loadTasks);
+document.getElementById('filter-status').addEventListener('change', loadTasks);
 
 // Multi-select danh sách giao việc
 function loadAssigneeCheckboxes() {
@@ -187,7 +218,7 @@ function loadAssigneeCheckboxes() {
   });
 }
 
-// Xử lý Giao việc Mới
+// Giao Việc Mới
 document.getElementById('assign-task-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const title = document.getElementById('task-title').value.trim();
@@ -205,7 +236,12 @@ document.getElementById('assign-task-form').addEventListener('submit', async (e)
 
   let instructionFile = null;
   if (fileInput.files.length > 0) {
-    instructionFile = await fileToBase64(fileInput.files[0]);
+    try {
+      instructionFile = await fileToBase64(fileInput.files[0]);
+    } catch (err) {
+      alert(err);
+      return;
+    }
   }
 
   const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS)) || [];
@@ -249,18 +285,22 @@ document.getElementById('report-task-form').addEventListener('submit', async (e)
     return;
   }
 
-  const reportFile = await fileToBase64(fileInput.files[0]);
-  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS));
-  const task = tasks.find(t => t.id === taskId);
+  try {
+    const reportFile = await fileToBase64(fileInput.files[0]);
+    const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS));
+    const task = tasks.find(t => t.id === taskId);
 
-  if (task) {
-    task.report_file = reportFile;
-    task.status = 'Chờ duyệt';
-    localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
-    alert('Đã gửi báo cáo thành công!');
-    reportModal.classList.add('hidden');
-    document.getElementById('report-task-form').reset();
-    loadTasks();
+    if (task) {
+      task.report_file = reportFile;
+      task.status = 'Chờ duyệt';
+      localStorage.setItem(STORAGE_TASKS, JSON.stringify(tasks));
+      alert('Đã gửi báo cáo thành công!');
+      reportModal.classList.add('hidden');
+      document.getElementById('report-task-form').reset();
+      loadTasks();
+    }
+  } catch (err) {
+    alert(err);
   }
 });
 
@@ -316,7 +356,6 @@ document.getElementById('create-user-form').addEventListener('submit', (e) => {
   loadAssigneeCheckboxes();
 });
 
-// Chức năng XÓA TÀI KHOẢN dành cho Quản lý (Hiệu trưởng)
 window.deleteUser = function(uName) {
   if (confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản [${uName}]?`)) {
     let users = JSON.parse(localStorage.getItem(STORAGE_USERS));
@@ -328,7 +367,7 @@ window.deleteUser = function(uName) {
   }
 };
 
-// Modal Đổi Mật Khẩu
+// Đổi Mật Khẩu
 const passModal = document.getElementById('modal-change-password');
 document.getElementById('btn-change-pass').onclick = () => passModal.classList.remove('hidden');
 document.querySelector('.close-modal-pass').onclick = () => passModal.classList.add('hidden');
@@ -352,4 +391,31 @@ document.getElementById('change-pass-form').addEventListener('submit', (e) => {
   alert('Đổi mật khẩu thành công!');
   passModal.classList.add('hidden');
   document.getElementById('change-pass-form').reset();
+});
+
+// XUẤT BÁO CÁO EXCEL (.CSV Unicode UTF-8)
+document.getElementById('btn-export-excel').addEventListener('click', () => {
+  const tasks = JSON.parse(localStorage.getItem(STORAGE_TASKS)) || [];
+  if (tasks.length === 0) {
+    alert('Không có dữ liệu công việc để xuất!');
+    return;
+  }
+
+  let csvContent = "\uFEFFMã CV,Tên công việc,Người giao,Người thực hiện,Hạn chót,Trạng thái\n";
+
+  tasks.forEach(t => {
+    const statusObj = checkStatus(t);
+    const assignees = `"${t.assignees.join('; ')}"`;
+    const title = `"${t.title.replace(/"/g, '""')}"`;
+    csvContent += `${t.id},${title},${t.created_by},${assignees},${t.deadline},${statusObj.text}\n`;
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Bao_Cao_Cong_Viec_${generateTaskId()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 });
